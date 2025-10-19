@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kiosk Clock + Weather + MQTT Overlay</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#000; --fg:#00ffcc; --fg-dim:#8adacb; --text:#fff; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:Segoe UI,system-ui,Arial}
+    .stage{height:100%;display:flex;align-items:center;justify-content:center;gap:96px;overflow:hidden}
+    .clock{font-size:150px;letter-spacing:2px;color:var(--fg);line-height:1}
+    .weather{display:flex;flex-direction:column;gap:14px;min-width:520px}
+    .row{display:flex;align-items:center;gap:16px}
+    .cond{font-size:48px}.temp{font-size:96px;color:var(--fg);line-height:.95}
+    .meta{font-size:16px;color:var(--fg-dim)} .icon{width:80px;height:80px}
+    /* Status strip (bottom) */
+    .status{position:fixed;left:0;right:0;bottom:0;padding:6px 12px;text-align:center;font-size:14px;color:#cfd8dc;opacity:.9}
+    .ok{background:rgba(0,255,204,.08)} .warn{background:rgba(255,179,0,.10)} .err{background:rgba(255,77,77,.10)}
+    .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:8px}
+    .dot.ok{background:#00d1b2}.dot.warn{background:#ffb300}.dot.err{background:#ff4d4d}
+    /* MQTT overlay banner */
+    .overlay{
+      position:fixed; top:20%; left:100%; transform:translateX(0);
+      min-width:40%; max-width:80%;
+      display:flex; align-items:center; gap:16px;
+      padding:18px 28px; border-radius:16px;
+      background: linear-gradient(90deg, rgba(0,209,255,.25), rgba(0,255,204,.35));
+      backdrop-filter: blur(4px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.4);
+      font-size:40px; color:white; white-space:nowrap;
+      pointer-events:none; z-index:10; opacity:0;
+    }
+    .overlay.show { animation: fly 6s ease-in-out forwards; }
+    @keyframes fly {
+      0%   { left:100%; opacity:0 }
+      10%  { left:60%;  opacity:1 }
+      60%  { left:10%;  opacity:1 }
+      90%  { left:-50%; opacity:.9 }
+      100% { left:-80%; opacity:0 }
+    }
+    .badge{
+      display:inline-flex; align-items:center; justify-content:center;
+      width:56px; height:56px; border-radius:12px; background:#0cf; color:#012; font-weight:700;
+      box-shadow: inset 0 0 10px rgba(255,255,255,.25);
+    }
+    .title{font-size:40px; font-weight:700}
+    .subtitle{font-size:24px; opacity:.9}
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div id="clock" class="clock">--:--</div>
+    <div class="weather">
+      <div class="row"><svg id="wicon" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg><div id="wcond" class="cond">Loading…</div></div>
+      <div id="wtemp" class="temp">--°C</div>
+      <div id="wmeta" class="meta"></div>
+    </div>
+  </div>
+
+  <!-- MQTT overlay -->
+  <div id="overlay" class="overlay" aria-hidden="true">
+    <div class="badge" id="obadge">★</div>
+    <div>
+      <div class="title" id="otitle">Announcement</div>
+      <div class="subtitle" id="obody"></div>
+    </div>
+  </div>
+
+  <div id="status" class="status warn"><span class="dot warn"></span><span id="statText">Waiting for first weather update…</span></div>
+
+  <!-- MQTT over WebSocket client -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script>
+    /* ====== CONFIG ====== */
+    // Home Assistant REST (for weather)
+    const HA_BASE = "http://192.168.2.23:8123";
+    const HA_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI2ZWZlZjliZjMzZGE0YmRiOTU0M2ZjOGQ4NDUxMzU4ZCIsImlhdCI6MTc1NjkyNzk2NCwiZXhwIjoyMDcyMjg3OTY0fQ.NuAsArci5De6_H04rWVPcs41GU-BnlUu6jSrhOMJzmw";
+    const WEATHER_ENTITY = "weather.knmi_home";
+    // MQTT (WebSockets) for announcements
+    const MQTT_URL  = "ws://192.168.2.23:1884";
+    const MQTT_USER = "hamqtt";
+    const MQTT_PASS = "lovaine6";
+    const MQTT_TOPIC = "display/cmd/announce/#";   // subscribe here
+    /* ==================== */
+
+    /* ---- Clock ---- */
+    function updateClock(){
+      const now = new Date();
+      document.getElementById("clock").textContent =
+        now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }
+    setInterval(updateClock, 1000); updateClock();
+
+    /* ---- Weather (same as before, shortened here) ---- */
+    const icons = {
+      sunny:`<circle cx="32" cy="32" r="12" fill="#FFD54F"/><g stroke="#FFD54F" stroke-width="4" stroke-linecap="round">
+      <line x1="32" y1="4" x2="32" y2="16"/><line x1="32" y1="48" x2="32" y2="60"/><line x1="4" y1="32" x2="16" y2="32"/><line x1="48" y1="32" x2="60" y2="32"/><line x1="12" y1="12" x2="20" y2="20"/><line x1="44" y1="44" x2="52" y2="52"/><line x1="44" y1="20" x2="52" y2="12"/><line x1="12" y1="52" x2="20" y2="44"/></g>`,
+      partly:`<circle cx="24" cy="22" r="10" fill="#FFD54F"/><path d="M18 40h24a10 10 0 0 0 0-20 14 14 0 0 0-27 4" fill="#B0BEC5"/><path d="M20 46h28a8 8 0 0 0 0-16" fill="#CFD8DC"/>`,
+      cloudy:`<ellipse cx="26" cy="36" rx="14" ry="10" fill="#B0BEC5"/><ellipse cx="40" cy="36" rx="12" ry="9" fill="#CFD8DC"/>`,
+      rain:`<ellipse cx="26" cy="30" rx="14" ry="10" fill="#B0BEC5"/><ellipse cx="40" cy="30" rx="12" ry="9" fill="#CFD8DC"/><g stroke="#00B0FF" stroke-width="4" stroke-linecap="round"><line x1="22" y1="44" x2="18" y2="56"/><line x1="32" y1="44" x2="28" y2="56"/><line x1="42" y1="44" x2="38" y2="56"/></g>`,
+      storm:`<ellipse cx="26" cy="30" rx="14" ry="10" fill="#B0BEC5"/><ellipse cx="40" cy="30" rx="12" ry="9" fill="#CFD8DC"/><polygon points="30,40 22,56 32,52 26,64 42,46 32,50 38,40" fill="#FFEE58"/>`,
+      snow:`<ellipse cx="26" cy="30" rx="14" ry="10" fill="#B0BEC5"/><ellipse cx="40" cy="30" rx="12" ry="9" fill="#CFD8DC"/><g stroke="#E0F7FA" stroke-width="3" stroke-linecap="round"><line x1="24" y1="44" x2="24" y2="56"/><line x1="20" y1="48" x2="28" y2="52"/><line x1="28" y1="48" x2="20" y2="52"/><line x1="36" y1="44" x2="36" y2="56"/><line x1="32" y1="48" x2="40" y2="52"/><line x1="40" y1="48" x2="32" y2="52"/></g>`,
+      fog:`<rect x="8" y="24" width="48" height="6" fill="#B0BEC5"/><rect x="10" y="34" width="44" height="6" fill="#CFD8DC"/><rect x="6" y="44" width="52" height="6" fill="#90A4AE"/>`,
+      wind:`<path d="M10 28h28a6 6 0 1 0-6-6" stroke="#B0BEC5" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M16 40h32a6 6 0 1 1-6 6" stroke="#CFD8DC" stroke-width="6" fill="none" stroke-linecap="round"/>`,
+      night:`<circle cx="28" cy="28" r="14" fill="#FFF59D"/><circle cx="36" cy="28" r="12" fill="#000"/>`,
+      hail:`<ellipse cx="26" cy="30" rx="14" ry="10" fill="#B0BEC5"/><ellipse cx="40" cy="30" rx="12" ry="9" fill="#CFD8DC"/><g fill="#E0F7FA"><circle cx="20" cy="50" r="3"/><circle cx="30" cy="52" r="3"/><circle cx="40" cy="50" r="3"/></g>`
+    };
+    function pickIcon(s){s=(s||"").toLowerCase(); if(s.includes("thunder")||s.includes("lightning"))return"storm";
+      if(s.includes("rain")||s.includes("shower")||s.includes("pour"))return"rain";
+      if(s.includes("snow"))return"snow"; if(s.includes("hail"))return"hail";
+      if(s.includes("fog")||s.includes("mist"))return"fog"; if(s.includes("wind"))return"wind";
+      if(s.includes("clear")&&s.includes("night"))return"night"; if(s.includes("clear")||s.includes("sun"))return"sunny";
+      if(s.includes("partly")||s.includes("few")||s.includes("broken"))return"partly";
+      if(s.includes("cloud"))return"cloudy"; return"cloudy";}
+    function setIcon(name){document.getElementById("wicon").innerHTML = icons[name] || icons.cloudy;}
+
+    const statEl=document.getElementById("status"), statText=document.getElementById("statText");
+    function setStatus(level,text){statEl.className=`status ${level}`; statEl.innerHTML=`<span class="dot ${level}"></span><span>${text}</span>`;}
+
+    async function fetchWeather(){
+      try{
+        const res = await fetch(`${HA_BASE}/api/states/${WEATHER_ENTITY}`, {
+          headers:{Authorization:`Bearer ${HA_TOKEN}`, Accept:"application/json"}
+        });
+        if(!res.ok){throw new Error(`HTTP ${res.status}`)}
+        const data = await res.json();
+        const condRaw=(data.state||"").replace(/_/g," ");
+        const a=data.attributes||{};
+        const temp=Math.round(a.temperature ?? a.native_temperature ?? NaN);
+        const unit=a.temperature_unit ?? a.native_temperature_unit ?? "°C";
+        const hum=a.humidity!=null?`${a.humidity}%`:null;
+        document.getElementById("wcond").textContent=condRaw?condRaw[0].toUpperCase()+condRaw.slice(1):"—";
+        document.getElementById("wtemp").textContent=Number.isFinite(temp)?`${temp}${unit}`:`--${unit}`;
+        document.getElementById("wmeta").textContent=hum?`Humidity ${hum}`:"";
+        setIcon(pickIcon(condRaw));
+        setStatus('ok', `Last updated ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`);
+      }catch(e){ setStatus('err', `Weather unavailable: ${e.message}`); }
+    }
+    fetchWeather(); setInterval(fetchWeather, 60_000);
+
+    /* ---- MQTT wiring ---- */
+    const overlay = document.getElementById('overlay');
+    const obadge  = document.getElementById('obadge');
+    const otitle  = document.getElementById('otitle');
+    const obody   = document.getElementById('obody');
+
+    function showOverlay({title="Announcement", body="", color="#00d1ff", icon="★", duration=6}={}){
+      obadge.textContent = icon;
+      otitle.textContent = title;
+      obody.textContent  = body;
+      overlay.style.background = `linear-gradient(90deg, ${hexToRgba(color,.25)}, ${hexToRgba(color,.4)})`;
+      overlay.classList.remove('show'); void overlay.offsetWidth; // restart animation
+      overlay.classList.add('show');
+      // Hide after duration (CSS handles movement)
+      setTimeout(()=>overlay.classList.remove('show'), duration*1000);
+    }
+    function hexToRgba(hex, a){
+      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)||[];
+      const r = parseInt(m[1]||"00",16), g=parseInt(m[2]||"00",16), b=parseInt(m[3]||"00",16);
+      return `rgba(${r},${g},${b},${a})`;
+    }
+
+    // Connect to MQTT over WebSocket
+    const clientId = "display-" + Math.random().toString(16).slice(2);
+    const mqttOpts = {
+      username: MQTT_USER, password: MQTT_PASS, keepalive: 30, reconnectPeriod: 3000,
+      clientId, clean: true
+    };
+    const client = mqtt.connect(MQTT_URL, mqttOpts);
+
+    client.on('connect', () => {
+      setStatus('ok', 'MQTT connected');
+      client.subscribe(MQTT_TOPIC, (err)=>{
+        if(err) setStatus('err', `MQTT subscribe failed: ${err.message}`);
+      });
+    });
+    client.on('reconnect', ()=> setStatus('warn','MQTT reconnecting…'));
+    client.on('close', ()=> setStatus('err','MQTT disconnected'));
+    client.on('error', (e)=> setStatus('err', `MQTT error: ${e.message}`));
+
+    client.on('message', (topic, payload) => {
+      // Expect JSON like: {"title":"Bin Day","body":"PMD today","color":"#00ffcc","icon":"🗑️","duration":6}
+      let data={}; try{ data = JSON.parse(new TextDecoder().decode(payload)); }catch{}
+      // Fallbacks so a simple text message still works
+      if(typeof data === 'string' || payload?.length){
+        data = { title: data.title || topic.split('/').slice(-1)[0], body: data.body || "" };
+      }
+      showOverlay(data);
+    });
+  </script>
+</body>
+</html>

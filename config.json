@@ -1,0 +1,49 @@
+{
+  "HA_BASE": "http://192.168.68.72:8123",
+  "HA_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI2ZWZlZjliZjMzZGE0YmRiOTU0M2ZjOGQ4NDUxMzU4ZCIsImlhdCI6MTc1NjkyNzk2NCwiZXhwIjoyMDcyMjg3OTY0fQ.NuAsArci5De6_H04rWVPcs41GU-BnlUu6jSrhOMJzmw",
+  "WEATHER_ENTITY": "weather.knmi_home",
+  "MQTT_URL": "ws://192.168.68.72:1884",
+  "MQTT_USER": "hamqtt",
+  "MQTT_PASS": "lovaine6",
+  "ticker_enabled": false,
+  "media_paths": {
+    "images": "./images/",
+    "videos": "./videos/",
+    "frames": "./frames/"
+  },
+  "file_validation": {
+    "enabled": true,
+    "allowed_extensions": {
+      "images": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"],
+      "videos": [".mp4", ".webm", ".ogg", ".mov", ".avi"],
+      "frames": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"]
+    }
+  },
+  "cache_busting": {
+    "enabled": true,
+    "media_files": true,
+    "static_files": false
+  },
+  "media_validation": {
+    "enabled": true,
+    "check_file_exists": true,
+    "ignore_missing_files": true
+  },
+  "standby": {
+    "clock_size_px": 260,
+    "weather_cond_size_px": 64,
+    "weather_temp_size_px": 130
+  },
+  "image": {
+    "clock_size_px": 200,
+    "right_width_px": 900
+  },
+  "video": {
+    "clock_size_px": 200,
+    "right_width_px": 900,
+    "autoplay": true,
+    "loop": true,
+    "muted": true,
+    "controls": false
+  }
+}

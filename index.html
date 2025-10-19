@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kiosk · Clock · Weather · MQTT</title>
+  <style>
+    /*
+     * Style block for all CSS rules.
+     * Use comments to organize sections for clarity.
+     */
+
+    /* --- CSS Variables --- */
+    :root {
+      --bg: #000;
+      --fg: #00ffcc;
+      --fg-dim: #8adacb;
+      --text: #fff;
+
+      /* Ticker tuneables */
+      --ticker-h: 80px;   /* height of the TV ticker */
+      --ticker-fs: 66px;  /* font size for the headline */
+    }
+
+    /* --- General Body & Layout Styles --- */
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+    }
+
+    .app {
+      height: 100%;
+      width: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* --- Reusable Components (e.g., icons, rows) --- */
+    .left {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 18px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .cond { font-weight: 500; }
+    .temp { color: var(--fg); }
+
+    .icon { width: 88px; height: 88px; }
+
+    /* --- Layouts --- */
+
+    /* STANDBY Layout */
+    .layout-standby {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 120px;
+    }
+
+    /* IMAGE & VIDEO Layout */
+    .layout-image {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 24px;
+    }
+
+    .right {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0a;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .right img {
+      max-height: 100%;
+      max-width: 100%;
+      object-fit: contain;
+    }
+
+    /* VIDEO Pane Specifics */
+    #right_video {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      background: #0a0a0a;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    #vidpane {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* --- Overlay Components --- */
+
+    /* FRAME Overlay */
+    #frameLayer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+      display: none;
+    }
+    #frameImg {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      opacity: 1;
+    }
+
+    /* BANNER Overlay */
+    .overlay {
+      position: absolute;
+      top: 12%;
+      left: 100%;
+      transform: translateX(0);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 28px;
+      border-radius: 16px;
+      background: linear-gradient(90deg, rgba(0, 209, 255, .25), rgba(0, 255, 204, .35));
+      backdrop-filter: blur(4px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+      font-size: 40px;
+      color: white;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0;
+    }
+    .overlay.show { animation: fly 6s ease-in-out forwards; }
+    @keyframes fly {
+      0% { left: 100%; opacity: 0; }
+      10% { left: 60%; opacity: 1; }
+      60% { left: 10%; opacity: 1; }
+      90% { left: -50%; opacity: .9; }
+      100% { left: -80%; opacity: 0; }
+    }
+    .badge{
+      display:inline-flex;align-items:center;justify-content:center;
+      width:56px;height:56px;border-radius:12px;background:#0cf;color:#012;
+      font-weight:700;box-shadow:inset 0 0 10px rgba(255,255,255,.25)
+    }
+    .title{font-size:40px;font-weight:700}
+    .subtitle{font-size:24px;opacity:.9}
+
+    /* === TV News Ticker === */
+    /* container */
+    .tv-ticker {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      height: var(--ticker-h);
+      z-index: 12;
+      pointer-events: none;
+    }
+    /* glossy red belt */
+    .tv-belt {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; gap: 14px;
+      background: linear-gradient(180deg, #c10d21 0%, #e11528 52%, #9b0a19 100%);
+      border-top: 2px solid rgba(255,255,255,0.15);
+      box-shadow: 0 -6px 18px rgba(0,0,0,0.45), inset 0 2px 6px rgba(255,255,255,0.18);
+      overflow: hidden;
+    }
+    /* blue pill logo */
+    .tv-logo {
+      margin-left: 10px;
+      flex: 0 0 auto;
+      min-width: 150px;
+      height: calc(var(--ticker-h) - 18px);
+      border-radius: 999px;
+      background: linear-gradient(180deg,#0b5ad8 0%,#0a4ab1 70%);
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: .5px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 18px;
+      font-size: 26px;
+      text-shadow: 0 0 6px rgba(0,0,0,.6);
+      box-shadow: inset 0 2px 6px rgba(255,255,255,.25);
+    }
+    /* white chevron arrow */
+    .tv-chevron {
+      flex: 0 0 28px;
+      width: 28px; height: 28px; margin-right: 6px;
+      background:
+        linear-gradient(45deg, transparent 45%, #ffffff 46% 54%, transparent 55%) 0 50%/100% 100% no-repeat;
+      filter: drop-shadow(0 0 2px rgba(0,0,0,.5));
+    }
+    /* marquee viewport */
+    .tv-marquee {
+      position: relative; flex: 1 1 auto;
+      height: 100%; overflow: hidden;
+    }
+    /* scrolling tracks */
+    .tv-track {
+      position: absolute; top: 0; height: 100%;
+      display: flex; align-items: center; white-space: nowrap;
+      font-size: var(--ticker-fs); font-weight: 800; color:#fff;
+      padding: 0 24px;
+      text-shadow:
+          0 0 6px rgba(0,0,0,.8),
+          0 0 12px rgba(0,0,0,.6);
+    }
+    .tv-track::after { content: "  •  "; opacity:.8; margin-left:28px; }
+
+    /* direction classes set by JS */
+    .dir-left  .tv-track { animation: tv-scroll-left  var(--dur, 20s) linear infinite; }
+    .dir-right .tv-track { animation: tv-scroll-right var(--dur, 20s) linear infinite; }
+
+    /* keyframes */
+    @keyframes tv-scroll-left  { from { transform: translateX(0%);   } to { transform: translateX(-100%);} }
+    @keyframes tv-scroll-right { from { transform: translateX(-100%);} to { transform: translateX(0%);   } }
+
+    /* This is the corrected version of the status bars */
+    .status-group {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+    .status {
+      padding: 6px 12px;
+      text-align: center;
+      font-size: 14px;
+      color: #cfd8dc;
+      opacity: .9;
+    }
+    .ok{background:rgba(0,255,204,.08)}
+    .warn{background:rgba(255,179,0,.10)}
+    .err{background:rgba(255,77,77,.10)}
+    .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:8px}
+    .dot.ok{background:#00d1b2}.dot.warn{background:#ffb300}.dot.err{background:#ff4d4d}
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <section id="standby" class="layout-standby" aria-hidden="false">
+      <div id="clock_standby" class="clock">--:--</div>
+      <div class="left">
+        <div class="row">
+          <svg id="wicon" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
+          <div id="wcond" class="cond">Loading…</div>
+        </div>
+        <div id="wtemp" class="temp">--°C</div>
+        <div id="wmeta" class="meta"></div>
+      </div>
+    </section>
+
+    <section id="image" class="layout-image" aria-hidden="true" style="display: none;">
+      <div class="left">
+        <div id="clock_image" class="clock">--:--</div>
+        <div class="row">
+          <svg id="wicon2" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
+          <div id="wcond2" class="cond"></div>
+        </div>
+        <div id="wtemp2" class="temp"></div>
+      </div>
+      <div id="right" class="right" style="width: 900px;">
+        <img id="imgpane" alt="announcement">
+      </div>
+    </section>
+
+    <section id="video" class="layout-image" aria-hidden="true" style="display: none;">
+      <div class="left">
+        <div id="clock_video" class="clock">--:--</div>
+        <div class="row">
+          <svg id="wicon3" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
+          <div id="wcond3" class="cond"></div>
+        </div>
+        <div id="wtemp3" class="temp"></div>
+      </div>
+      <div id="right_video" style="width: 900px;">
+        <video id="vidpane" playsinline muted autoplay controls></video>
+      </div>
+    </section>
+
+    <div id="frameLayer">
+      <img id="frameImg" alt="frame">
+    </div>
+
+    <div id="overlay" class="overlay" aria-hidden="true">
+      <div class="badge" id="obadge">★</div>
+      <div>
+        <div class="title" id="otitle">Announcement</div>
+        <div class="subtitle" id="obody"></div>
+      </div>
+    </div>
+
+    <div id="ticker" class="tv-ticker" style="display:none">
+      <div class="tv-belt">
+        <div class="tv-logo">NEWS</div>
+        <div class="tv-chevron"></div>
+        <div class="tv-marquee">
+          <div class="tv-track" id="tickerText"></div>
+          <div class="tv-track dup" id="tickerTextDup"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-group">
+      <div id="mqttStatus" class="status warn">
+        <span class="dot warn"></span>
+        <span id="mqttStatText">Starting…</span>
+      </div>
+      <div id="weatherStatus" class="status warn">
+        <span class="dot warn"></span>
+        <span id="weatherStatText">Starting…</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

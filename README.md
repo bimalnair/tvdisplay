@@ -45,3 +45,15 @@ You must manually create the custom user-data directory required by the new Chro
 Bash
 
 mkdir -p ~/.config/chromium-data
+### 4. Kiosk Autostart Script (`kiosk.desktop`)
+
+This file must be placed at `~/.config/autostart/kiosk.desktop`. It handles starting the local web server, changing to the `kiosk/` directory, and launching Chromium with the necessary stability and security bypass flags.
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=Kiosk
+# This command starts the web server in the background (using '&') and then launches Chromium.
+# The --user-data-dir and --disable-web-security flags are CRITICAL for stable local MQTT/AJAX.
+Exec=sh -c "cd kiosk/ && python3 -m http.server 8000 & while true; do pgrep -x chromium >/dev/null || chromium-browser --kiosk --start-fullscreen --incognito --user-data-dir=~/.config/chromium-data --disable-web-security --no-proxy-server --autoplay-policy=no-user-gesture-required --disable-restore-session-state http://localhost:8000; sleep 10; done"
+X-GNOME-Autostart-enabled=true

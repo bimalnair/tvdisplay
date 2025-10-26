@@ -18,6 +18,16 @@ The unstable MQTT connection was fixed by correcting the Chromium launch command
 2.1. Startup File (~/.config/autostart/kiosk.desktop)
 Create this file in your user's autostart directory and use the exact Exec line below. It includes the directory change, web server background launch, and crucial security flags.
 
+### 2. Initial Setup Commands
+
+Before launching the kiosk for the first time, run these commands in the Raspberry Pi terminal to prepare the environment:
+
+1. **Install Python Web Server (if needed):**
+   ```bash
+   sudo apt update
+   sudo apt install python3 python3-pip -y
+
+
 File Location: /home/bimal/.config/autostart/kiosk.desktop
 
 Ini, TOML

@@ -57,6 +57,72 @@
 
     .icon { width: 88px; height: 88px; }
 
+    .clock {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 28px;
+      font-weight: 700;
+      letter-spacing: -6px;
+      line-height: 1;
+      color: var(--text);
+    }
+    .clock-main {
+      font-size: 1em;
+    }
+    .clock-meridiem {
+      font-size: 0.22em;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: var(--fg-dim);
+      margin-bottom: 18px;
+    }
+
+    .room-card {
+      padding: 22px 28px;
+      border-radius: 26px;
+      background: linear-gradient(135deg, rgba(0, 255, 204, 0.16), rgba(0, 255, 204, 0.04));
+      border: 1px solid rgba(0, 255, 204, 0.24);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 280px;
+      max-width: 340px;
+    }
+    .room-label {
+      font-size: 22px;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      color: var(--fg-dim);
+    }
+    .room-temp {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      color: var(--fg);
+      text-shadow: 0 0 22px rgba(0, 255, 204, 0.28);
+    }
+    .room-temp-value {
+      font-size: clamp(68px, 8vw, 118px);
+      font-weight: 700;
+      line-height: 1;
+    }
+    .room-temp-unit {
+      font-size: clamp(32px, 4vw, 48px);
+      font-weight: 500;
+      color: var(--fg-dim);
+      letter-spacing: 2px;
+    }
+    .room-meta {
+      font-size: 16px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .room-meta.error {
+      color: #ff7699;
+    }
+
     /* --- Layouts --- */
 
     /* STANDBY Layout */
@@ -92,6 +158,43 @@
       max-height: 100%;
       max-width: 100%;
       object-fit: contain;
+    }
+
+    .sensor-top {
+      display: flex;
+      align-items: stretch;
+      gap: 28px;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+    .weather-block {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 280px;
+      max-width: 340px;
+    }
+    .weather-block .row {
+      justify-content: flex-start;
+    }
+    .weather-block .temp {
+      font-size: clamp(58px, 7vw, 92px);
+      font-weight: 700;
+      text-shadow: 0 0 22px rgba(0, 255, 204, 0.28);
+    }
+    .weather-block .meta {
+      font-size: 16px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.65);
+    }
+    .sensor-top .room-card {
+      min-width: 280px;
+      max-width: 340px;
+    }
+    .sensor-top .weather-block,
+    .sensor-top .room-card {
+      flex: 1 1 0;
     }
 
     /* VIDEO Pane Specifics */
@@ -252,6 +355,57 @@
     .err{background:rgba(255,77,77,.10)}
     .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:8px}
     .dot.ok{background:#00d1b2}.dot.warn{background:#ffb300}.dot.err{background:#ff4d4d}
+
+    /* --- International clock --- */
+    .intl-clock {
+      align-self: center;
+      margin-top: 32px;
+      padding: 24px 38px;
+      border-radius: 28px;
+      background: linear-gradient(150deg, rgba(0, 0, 0, 0.72), rgba(0, 255, 204, 0.18));
+      border: 1px solid rgba(0, 255, 204, 0.32);
+      box-shadow: 0 18px 46px rgba(0,0,0,0.55);
+      backdrop-filter: blur(14px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      text-align: center;
+      min-width: clamp(260px, 32vw, 380px);
+      pointer-events: none;
+    }
+    .intl-label {
+      font-size: 14px;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: var(--fg-dim);
+      opacity: 0.85;
+    }
+    .intl-time {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 10px;
+      color: var(--fg);
+      text-shadow: 0 0 18px rgba(0, 255, 204, 0.24);
+    }
+    .intl-time-value {
+      font-size: clamp(68px, 8vw, 108px);
+      font-weight: 700;
+      letter-spacing: -2px;
+    }
+    .intl-time-meridiem {
+      font-size: 18px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.7);
+    }
+    .intl-meta {
+      font-size: 13px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+    }
   </style>
 </head>
 <body>
@@ -260,23 +414,63 @@
     <section id="standby" class="layout-standby" aria-hidden="false">
       <div id="clock_standby" class="clock">--:--</div>
       <div class="left">
-        <div class="row">
-          <svg id="wicon" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
-          <div id="wcond" class="cond">Loading…</div>
+        <div class="sensor-top">
+          <div class="weather-block">
+            <div class="row">
+              <svg id="wicon" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
+              <div id="wcond" class="cond">Loading…</div>
+            </div>
+            <div id="wtemp" class="temp">--°C</div>
+            <div id="wmeta" class="meta"></div>
+          </div>
+          <div id="roomCard" class="room-card" data-room-temp-card style="display:none;" aria-hidden="true">
+            <div id="roomLabel" class="room-label">Living Room</div>
+            <div class="room-temp">
+              <span id="roomTempValue" class="room-temp-value">--</span>
+              <span id="roomTempUnit" class="room-temp-unit">°C</span>
+            </div>
+            <div id="roomMeta" class="room-meta">Waiting for sensor…</div>
+          </div>
         </div>
-        <div id="wtemp" class="temp">--°C</div>
-        <div id="wmeta" class="meta"></div>
+        <div class="intl-clock" data-intl-clock aria-hidden="true">
+          <div class="intl-label">India</div>
+          <div class="intl-time">
+            <span class="intl-time-value" data-intl-time>--:--</span>
+            <span class="intl-time-meridiem" data-intl-meridiem>AM</span>
+          </div>
+          <div class="intl-meta">Asia / Kolkata</div>
+        </div>
       </div>
     </section>
 
     <section id="image" class="layout-image" aria-hidden="true" style="display: none;">
       <div class="left">
         <div id="clock_image" class="clock">--:--</div>
-        <div class="row">
-          <svg id="wicon2" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
-          <div id="wcond2" class="cond"></div>
+        <div class="sensor-top">
+          <div class="weather-block">
+            <div class="row">
+              <svg id="wicon2" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
+              <div id="wcond2" class="cond"></div>
+            </div>
+            <div id="wtemp2" class="temp"></div>
+          </div>
+          <div id="roomCard2" class="room-card" data-room-temp-card style="display:none;" aria-hidden="true">
+            <div id="roomLabel2" class="room-label">Living Room</div>
+            <div class="room-temp">
+              <span id="roomTempValue2" class="room-temp-value">--</span>
+              <span id="roomTempUnit2" class="room-temp-unit">°C</span>
+            </div>
+            <div id="roomMeta2" class="room-meta">Waiting for sensor…</div>
+          </div>
         </div>
-        <div id="wtemp2" class="temp"></div>
+        <div class="intl-clock" data-intl-clock aria-hidden="true">
+          <div class="intl-label">India</div>
+          <div class="intl-time">
+            <span class="intl-time-value" data-intl-time>--:--</span>
+            <span class="intl-time-meridiem" data-intl-meridiem>AM</span>
+          </div>
+          <div class="intl-meta">Asia / Kolkata</div>
+        </div>
       </div>
       <div id="right" class="right" style="width: 900px;">
         <img id="imgpane" alt="announcement">
@@ -286,11 +480,31 @@
     <section id="video" class="layout-image" aria-hidden="true" style="display: none;">
       <div class="left">
         <div id="clock_video" class="clock">--:--</div>
-        <div class="row">
-          <svg id="wicon3" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
-          <div id="wcond3" class="cond"></div>
+        <div class="sensor-top">
+          <div class="weather-block">
+            <div class="row">
+              <svg id="wicon3" class="icon" viewBox="0 0 64 64" aria-hidden="true"></svg>
+              <div id="wcond3" class="cond"></div>
+            </div>
+            <div id="wtemp3" class="temp"></div>
+          </div>
+          <div id="roomCard3" class="room-card" data-room-temp-card style="display:none;" aria-hidden="true">
+            <div id="roomLabel3" class="room-label">Living Room</div>
+            <div class="room-temp">
+              <span id="roomTempValue3" class="room-temp-value">--</span>
+              <span id="roomTempUnit3" class="room-temp-unit">°C</span>
+            </div>
+            <div id="roomMeta3" class="room-meta">Waiting for sensor…</div>
+          </div>
         </div>
-        <div id="wtemp3" class="temp"></div>
+        <div class="intl-clock" data-intl-clock aria-hidden="true">
+          <div class="intl-label">India</div>
+          <div class="intl-time">
+            <span class="intl-time-value" data-intl-time>--:--</span>
+            <span class="intl-time-meridiem" data-intl-meridiem>AM</span>
+          </div>
+          <div class="intl-meta">Asia / Kolkata</div>
+        </div>
       </div>
       <div id="right_video" style="width: 900px;">
         <video id="vidpane" playsinline muted autoplay controls></video>

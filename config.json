@@ -2,6 +2,8 @@
   "HA_BASE": "http://192.168.68.72:8123",
   "HA_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiI2ZWZlZjliZjMzZGE0YmRiOTU0M2ZjOGQ4NDUxMzU4ZCIsImlhdCI6MTc1NjkyNzk2NCwiZXhwIjoyMDcyMjg3OTY0fQ.NuAsArci5De6_H04rWVPcs41GU-BnlUu6jSrhOMJzmw",
   "WEATHER_ENTITY": "weather.knmi_home",
+  "ROOM_TEMP_ENTITY": "sensor.t_h_sensor_temperature",
+  "ROOM_TEMP_LABEL": "Living Room",
   "MQTT_URL": "ws://192.168.68.72:1884",
   "MQTT_USER": "hamqtt",
   "MQTT_PASS": "lovaine6",

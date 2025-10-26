@@ -77,23 +77,113 @@ const weatherStatText = document.getElementById('weatherStatText');
 const clk1 = document.getElementById('clock_standby');
 const clk2 = document.getElementById('clock_image');
 const clk3 = document.getElementById('clock_video');
+const mainClockTargets = [clk1, clk2, clk3].filter(Boolean);
 
 // Ticker refs (TV style)
 const ticker       = document.getElementById('ticker');
 const tickerText   = document.getElementById('tickerText');
 const tickerTextDup= document.getElementById('tickerTextDup');
 
+// India clock refs
+const indiaClockBlocks = Array.from(document.querySelectorAll('[data-intl-clock]')).map(block => ({
+  wrap: block,
+  timeEl: block.querySelector('[data-intl-time]'),
+  meridiemEl: block.querySelector('[data-intl-meridiem]')
+}));
+
+// Room temperature refs
+const roomCardStandby = document.getElementById('roomCard');
+const roomLabelStandby = document.getElementById('roomLabel');
+const roomValueStandby = document.getElementById('roomTempValue');
+const roomUnitStandby  = document.getElementById('roomTempUnit');
+const roomMetaStandby  = document.getElementById('roomMeta');
+
+const roomCardImage = document.getElementById('roomCard2');
+const roomLabelImage = document.getElementById('roomLabel2');
+const roomValueImage = document.getElementById('roomTempValue2');
+const roomUnitImage  = document.getElementById('roomTempUnit2');
+const roomMetaImage  = document.getElementById('roomMeta2');
+
+const roomCardVideo = document.getElementById('roomCard3');
+const roomLabelVideo = document.getElementById('roomLabel3');
+const roomValueVideo = document.getElementById('roomTempValue3');
+const roomUnitVideo  = document.getElementById('roomTempUnit3');
+const roomMetaVideo  = document.getElementById('roomMeta3');
+
+const roomCards = [
+  { card: roomCardStandby, label: roomLabelStandby, value: roomValueStandby, unit: roomUnitStandby, meta: roomMetaStandby },
+  { card: roomCardImage,   label: roomLabelImage,   value: roomValueImage,   unit: roomUnitImage,   meta: roomMetaImage },
+  { card: roomCardVideo,   label: roomLabelVideo,   value: roomValueVideo,   unit: roomUnitVideo,   meta: roomMetaVideo }
+].filter(part => part.card);
+
 // ---- Frame overlay refs ----
 const frameLayer = document.getElementById('frameLayer');
 const frameImg   = document.getElementById('frameImg');
 
+// Weather overlay refs
+const weatherWidgets = [
+  {
+    iconEl: document.getElementById('wicon'),
+    condEl: document.getElementById('wcond'),
+    tempEl: document.getElementById('wtemp'),
+    metaEl: document.getElementById('wmeta')
+  },
+  {
+    iconEl: document.getElementById('wicon2'),
+    condEl: document.getElementById('wcond2'),
+    tempEl: document.getElementById('wtemp2')
+  },
+  {
+    iconEl: document.getElementById('wicon3'),
+    condEl: document.getElementById('wcond3'),
+    tempEl: document.getElementById('wtemp3')
+  }
+].filter(widget => widget.iconEl || widget.condEl || widget.tempEl);
+
+// ---------- Time formatting ----------
+const mainClockFormatter = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true
+});
+
+const indiaClockFormatter = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+  timeZone: 'Asia/Kolkata'
+});
+
+function getTimeParts(formatter, date){
+  const parts = formatter.formatToParts(date);
+  const hour = parts.find(p=>p.type === 'hour')?.value ?? '--';
+  const minute = parts.find(p=>p.type === 'minute')?.value ?? '--';
+  const period = parts.find(p=>p.type === 'dayPeriod')?.value ?? '';
+  return {
+    hour: hour.padStart(2, '0'),
+    minute: minute.padStart(2, '0'),
+    meridiem: period.toUpperCase()
+  };
+}
+
+function renderMainClocks(timeParts){
+  const markup = `<span class="clock-main">${timeParts.hour}:${timeParts.minute}</span><span class="clock-meridiem">${timeParts.meridiem}</span>`;
+  mainClockTargets.forEach(el => { el.innerHTML = markup; });
+}
+
+function renderIndiaClock(timeParts){
+  indiaClockBlocks.forEach(({ wrap, timeEl, meridiemEl })=>{
+    if (timeEl) timeEl.textContent = `${timeParts.hour}:${timeParts.minute}`;
+    if (meridiemEl) meridiemEl.textContent = timeParts.meridiem;
+    if (wrap) wrap.setAttribute('aria-hidden', 'false');
+  });
+}
+
 // ---------- Clock ----------
 function tick() {
   const now = new Date();
-  const txt = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  clk1.textContent = txt;
-  clk2.textContent = txt;
-  clk3.textContent = txt;
+  renderMainClocks(getTimeParts(mainClockFormatter, now));
+  renderIndiaClock(getTimeParts(indiaClockFormatter, now));
 }
 setInterval(tick, 1000);
 tick();
@@ -127,6 +217,98 @@ function pickIcon(s){
 }
 function setIcon(svgEl, name){ svgEl.innerHTML = icons[name] || icons.cloudy; }
 
+let roomTempTimer;
+let lastRoomUnit = '°C';
+let roomTempHasError = false;
+
+function toggleRoomCards(show){
+  roomCards.forEach(({ card })=>{
+    if (!card) return;
+    card.style.display = show ? '' : 'none';
+    card.setAttribute('aria-hidden', show ? 'false' : 'true');
+  });
+}
+
+function setRoomCardLabel(text){
+  roomCards.forEach(({ label })=>{
+    if (label && text) label.textContent = text;
+  });
+}
+
+function updateRoomCard({ value, unit, meta, isError = false } = {}){
+  roomCards.forEach(({ value: valueEl, unit: unitEl, meta: metaEl })=>{
+    if (valueEl !== null && valueEl !== undefined && value !== undefined) valueEl.textContent = value;
+    if (unitEl !== null && unitEl !== undefined && unit !== undefined) unitEl.textContent = unit;
+    if (metaEl){
+      if (meta !== undefined) metaEl.textContent = meta;
+      metaEl.classList.toggle('error', Boolean(isError));
+    }
+  });
+}
+
+function formatRoomTempValue(temp){
+  if (!Number.isFinite(temp)) return '--';
+  return Number.isInteger(temp) ? temp.toString() : temp.toFixed(1);
+}
+
+async function fetchRoomTemp(){
+  if (!CFG.ROOM_TEMP_ENTITY) return;
+  try{
+    const r = await fetch(`${CFG.HA_BASE}/api/states/${CFG.ROOM_TEMP_ENTITY}`, {
+      headers:{ Authorization:`Bearer ${CFG.HA_TOKEN}`, Accept:'application/json' }
+    });
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const attrs = d.attributes || {};
+    const unit = attrs.unit_of_measurement ?? attrs.native_unit_of_measurement ?? attrs.unit_of_measure ?? lastRoomUnit ?? '°C';
+    lastRoomUnit = unit;
+    updateRoomCard({ unit });
+
+    const stateRaw = (d.state ?? '').trim();
+    const valueNum = Number.parseFloat(stateRaw);
+    const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const wasError = roomTempHasError;
+
+    if (Number.isFinite(valueNum)){
+      const displayVal = formatRoomTempValue(valueNum);
+      roomTempHasError = false;
+      updateRoomCard({ value: displayVal, meta: `Updated ${stamp}`, isError: false });
+      if (wasError) setWeatherStatus('ok', `Room temp OK @ ${stamp}`);
+    } else {
+      const meta = stateRaw ? `Sensor reported: ${stateRaw}` : 'Sensor unavailable';
+      roomTempHasError = true;
+      updateRoomCard({ value: '--', meta, isError: true });
+      setWeatherStatus('warn', `Room temp unavailable (${stateRaw || 'no data'})`);
+    }
+  }catch(e){
+    console.error('Room temperature fetch error', e);
+    roomTempHasError = true;
+    updateRoomCard({ value: '--', unit: lastRoomUnit, meta: `Error: ${e.message}`, isError: true });
+    setWeatherStatus('err', `Room temp error: ${e.message}`);
+  }
+}
+
+function initRoomTemperature(){
+  const entity = CFG.ROOM_TEMP_ENTITY;
+  const label = CFG.ROOM_TEMP_LABEL || 'Room Temperature';
+
+  roomTempHasError = false;
+  setRoomCardLabel(label);
+
+  if (!entity || roomCards.length === 0){
+    toggleRoomCards(false);
+    clearInterval(roomTempTimer);
+    return;
+  }
+
+  toggleRoomCards(true);
+  updateRoomCard({ value: '--', unit: lastRoomUnit, meta: 'Waiting for sensor…', isError: false });
+
+  clearInterval(roomTempTimer);
+  fetchRoomTemp();
+  roomTempTimer = setInterval(fetchRoomTemp, 60_000);
+}
+
 // ---------- Weather ----------
 async function fetchWeather(){
   try{
@@ -141,23 +323,17 @@ async function fetchWeather(){
     const unit = a.temperature_unit ?? a.native_temperature_unit ?? "°C";
     const hum  = a.humidity!=null?`${a.humidity}%`:null;
 
-    // standby
-    document.getElementById('wcond').textContent  = cond;
-    document.getElementById('wtemp').textContent  = Number.isFinite(temp)?`${temp}${unit}`:`--${unit}`;
-    document.getElementById('wmeta').textContent  = hum?`Humidity ${hum}`:"";
-    setIcon(document.getElementById('wicon'), pickIcon(condRaw));
+    weatherWidgets.forEach(({ iconEl, condEl, tempEl, metaEl }) => {
+      if (condEl) condEl.textContent = cond;
+      if (tempEl) tempEl.textContent = Number.isFinite(temp) ? `${temp}${unit}` : `--${unit}`;
+      if (metaEl) metaEl.textContent = hum ? `Humidity ${hum}` : "";
+      if (iconEl) setIcon(iconEl, pickIcon(condRaw));
+    });
 
-    // image
-    document.getElementById('wcond2').textContent = cond;
-    document.getElementById('wtemp2').textContent = Number.isFinite(temp)?`${temp}${unit}`:`--${unit}`;
-    setIcon(document.getElementById('wicon2'), pickIcon(condRaw));
-
-    // video
-    document.getElementById('wcond3').textContent = cond;
-    document.getElementById('wtemp3').textContent = Number.isFinite(temp)?`${temp}${unit}`:`--${unit}`;
-    setIcon(document.getElementById('wicon3'), pickIcon(condRaw));
-
-    setWeatherStatus('ok', `Weather OK @ ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (!roomTempHasError) {
+      setWeatherStatus('ok', `Weather OK @ ${stamp}`);
+    }
   }catch(e){
     setWeatherStatus('err', `Weather error: ${e.message}`);
   }
@@ -608,6 +784,7 @@ function mqttConnect(){
 
     showStandby();
     fetchWeather(); // initial fetch
+    initRoomTemperature();
     mqttConnect();
   }catch(e){
     setWeatherStatus('err', 'Boot error: '+e.message);

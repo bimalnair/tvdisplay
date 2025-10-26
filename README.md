@@ -6,7 +6,7 @@ This guide documents the final working configuration for the stable Chromium Kio
 1. File Structure
 Ensure the following files are located inside your main Kiosk directory (e.g., /home/bimal/kiosk/):
 
-kiosk/
+```kiosk/
 ├── index.html
 ├── app.js
 ├── config.json
